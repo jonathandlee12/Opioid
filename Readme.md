@@ -1,0 +1,11 @@
+Age-dependent transcriptomic effects of morphine in the frontal cortex of female mice
+This repository provides instructions, code, and supplementary data files to reproduce results and figures from our opioid and aging paper
+
+J Savage, A Rai, JD Lee, J Banahan, K Dujic, M Nunez, B Caldarone, S Ghoshal, FJ Slack, M Mavrikaki. Age-dependent transcriptomic effects of morphine in the frontal cortex of female mice. Neuropharmacology (In revision 2025).
+
+Abstract
+Increasing lifespans make health problems in the elderly such as opioid misuse a more prominent concern. Understanding the effects that opioids may have on the aged brain can help us address age-related concerns of opioid exposure. This study aimed to assess potential interactions between aging and opioid exposure. Three-month-old (young adult) and 19-month-old (aged) C57BL/6JN mice were assigned to either a morphine (3mg/kg, i.p.) or saline group. A conditioned placed preference (CPP) task was used to assess reward sensitivity, while rotarod and beam walk tests were used to assess sensorimotor coordination. To assess for potential age-dependent effects of morphine on gene expression, we performed RNA sequencing in the prefrontal cortex (PFC). We found that morphine induced CPP in both age groups. Our results indicate impaired motor coordination in aged mice; however, morphine did not significantly affect motor coordination in either age group, although a trend toward an increased number of slips was observed in morphine-treated aged mice. Transcriptomic analysis revealed more robust effects of morphine on gene expression in the aged brain compared to the young brain. Interestingly, we found limited overlap between morphine-regulated genes in young and old mice, suggesting that the molecular effects of morphine are age-dependent. Taken together, while we found no significant interactions between morphine (at the tested dose) and aging in the behavioral assays, morphine caused age-dependent gene expression changes. Our findings suggest that age should be considered when prescribing opioids and that age-specific therapeutics may help address opioid use disorder in the elderly.
+  
+Code information
+The available R markdown file contains R scripts used to generate all figures and data tables available with the current iteration of the manuscript.
+
