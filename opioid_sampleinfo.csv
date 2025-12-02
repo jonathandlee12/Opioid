@@ -1,0 +1,13 @@
+Library,Name,RIN,UDI,P7 Index sequence (all Illumina instruments) ,"P5 Index sequence2 (HiSeq2000/2500, MiSeq, and NovaSeq 6000 - v1.0 reagent kits - instruments) ","P5 Index sequence3 (iSeq, MiniSeq, NextSeq, HiSeq3000/4000, HiSeqX and NovaSeq 6000 - v1.5 reagent kits - instruments)",,Drug treatment,Age group
+19,F1,8.9,64,CAGGAGCC ,GTCCAATC ,GATTGGAC,,saline,Young
+20,F5,9.1,67,TCGCCTTG ,GCTGATTC ,GAATCAGC,,saline,Young
+21,F7,8.9,68,CCAGAGCT ,CGAACTTC ,GAAGTTCG,,saline,Young
+22,F2,9,69,TACTTAGC ,AGGTACCA ,TGGTACCT,,Morphine,Young
+23,F3,9,70,GTCTGATG ,ATATCCGA ,TCGGATAT ,,Morphine,Young
+24,F8,8.9,71,TCTCGGTC ,CTGACATC ,GATGTCAG ,,Morphine,Young
+25,AF6,8.6,72,AAGACACT ,TGACAGCA ,TGCTGTCA,,saline,Old
+26,AF9,8.5,75,CTGTGGCG ,CACTAGCC ,GGCTAGTG  ,,saline,Old
+27,AF10,8.7,58,TCCTTGGT ,GAATCGAC ,GTCGATTC,,saline,Old
+28,AF4,8.9,59,GTCATCTA ,TCCAACCA ,TGGTTGGA,,Morphine,Old
+29,AF5,8.9,60,GAACCTAG ,CTGGTATT ,AATACCAG,,Morphine,Old
+30,AF7,8.7,61,CAGCAAGG ,CCTCTAAC ,GTTAGAGG ,,Morphine,Old

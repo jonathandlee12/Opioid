@@ -1,0 +1,271 @@
+---
+title: "Opioid Mouse Brain"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+Authors: Jonathan Lee
+Last updated: 2022-04-14
+---
+
+```{r setup, include=FALSE}
+library(stringr)
+library(ggplot2)
+library(ggrepel)
+library(GO.db)
+library(fgsea)
+library(biomaRt)
+library(org.Mm.eg.db)
+library(dplyr)
+library(reshape2)
+library(tximport)
+library(DESeq2)
+library(viridis)
+
+gg_color_hue <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}
+```
+
+# RNA-seq analysis
+
+```{r, eval=T}
+# create treatment sample matrix
+sampleinfo <- read.csv(file="opioid_sampleinfo.csv")
+row.names(sampleinfo) <- sampleinfo$Library
+sampleinfo <- sampleinfo[,c(1,2,3,4,9,10)]
+
+sampleinfo$Group <- paste0(sampleinfo$Drug.treatment, "_", sampleinfo$Age.group)
+#sampleinfo <- sampleinfo[c(1:3,7:9),]
+```
+
+```{r, eval=T, fig.width=4, fig.height=2}
+ggplot(sampleinfo, aes(x=Drug.treatment, fill=Age.group)) + geom_bar(position=position_dodge()) + theme_classic() + ylab("Batch") + xlab("")+ coord_flip()
+```
+
+# Gene expression from Salmon
+
+```{r, eval=F}
+# Obtain ensembl annotations from biomaRt
+tx2gene <- getBM(attributes= c("ensembl_transcript_id","ensembl_gene_id", "external_gene_name", "entrezgene_id", "gene_biotype"), mart = useDataset("mmusculus_gene_ensembl", useMart("ensembl")))
+
+write.table(tx2gene, file="tx2gene.txt", sep='\t', quote=F)
+```
+
+```{r, eval=T}
+tx2gene <- read.table(file="tx2gene.txt", sep='\t')
+```
+
+```{r, eval=T}
+go.list <- as.list(org.Mm.egGO2ALLEGS)
+go.ont <- sapply(names(go.list), Ontology)
+names(go.ont) <- unlist(strsplit(names(go.ont), "[.]"))[c(T,F)]
+names(go.list) <- sapply(names(go.list), function(x) { paste0(x, "-", unname(Term(x))) })
+
+gobp.list <- go.list[which(go.ont=="BP")]
+
+for(n in names(gobp.list)){
+  gobp.list[[n]] <- unique(subset(tx2gene, entrezgene_id %in% gobp.list[[n]])$external_gene_name)
+}
+```
+
+```{r, eval=T}
+set.seed(42)
+## List all directories containing data  
+samples <- list.files(path = "RNASEQ_SALMON/", full.names = T, pattern=".sf")
+names(samples) <- str_replace_all(str_replace_all(samples, "RNASEQ_SALMON//", ""), ".quant.sf", "")
+
+samples <- samples[row.names(sampleinfo)]
+
+# Run tximport
+txi_gsm <- tximport(samples, type="salmon", tx2gene=tx2gene[,c("ensembl_transcript_id", "ensembl_gene_id")], countsFromAbundance="lengthScaledTPM", ignoreTxVersion = T)
+```
+
+# Clustering analysis
+
+```{r, eval=T}
+set.seed(42)
+sampleinfo$Group <- factor(as.character(sampleinfo$Group), levels=c("saline_Young", "saline_Old", "Morphine_Young", "Morphine_Old"))
+rnaseq_dds <- DESeqDataSetFromTximport(txi_gsm, colData = sampleinfo, design = ~Group)
+```
+
+```{r, eval=T}
+set.seed(42)
+rnaseq_vst <- assay(varianceStabilizingTransformation(rnaseq_dds))
+rnaseq_vst <- round(rnaseq_vst, 5)
+
+write.table(merge(tx2gene[!duplicated(tx2gene[,c(2:3)]),c(2:3)], rnaseq_vst, by.x=1, by.y=0), file="rnaseq_vst_counts.txt", row.names=F, quote=F, sep='\t')
+```
+
+```{r, eval=T, fig.width=3.5, fig.height=3}
+pc <- prcomp(t(rnaseq_vst))
+summary(pc)
+
+ggplot(data.frame(pc$x, label=sampleinfo[colnames(rnaseq_vst),"Name"], treatment=sampleinfo[colnames(rnaseq_vst),"Drug.treatment"], age=sampleinfo[colnames(rnaseq_vst),"Age.group"]), aes(PC1, PC2)) + 
+  geom_point(size=3, aes(color=age, pch=treatment)) + theme_classic() + geom_text_repel(aes(label=label)) + xlab(paste0("PC1 (", 100*summary(pc)$importance[2,1], "% of variance)")) + ylab(paste0("PC2 (", 100*summary(pc)$importance[2,2], "% of variance)")) + geom_vline(xintercept=0, lty=3, color="red") #+ theme(legend.position = "none") #theme(legend.title=element_blank())
+```
+
+```{r, eval=T}
+set.seed(42)
+sampleinfo$Group <- factor(as.character(sampleinfo$Group), levels=c("saline_Young", "saline_Old", "Morphine_Young", "Morphine_Old"))
+rnaseq_dds <- DESeqDataSetFromTximport(txi_gsm, colData = sampleinfo, design = ~Group)
+rnaseq_dds <- DESeq(rnaseq_dds)
+```
+
+```{r, eval=T, echo=F}
+set.seed(1)
+results_old_young <- lfcShrink(rnaseq_dds,coef=2)
+results_old_young <- merge(data.frame(results_old_young), tx2gene[!duplicated(tx2gene[,c(2,3)]),c(2,3)], by.x=0, by.y=1)
+```
+
+```{r, eval=T, fig.width=3, fig.height=3}
+ggplot(results_old_young, aes(x=log2FoldChange, y=-log10(padj))) + geom_point(pch=20, color="lightgray", alpha=0.5, data=subset(results_old_young, padj > 0.05)) + geom_point(pch=20, color="indianred", data=subset(results_old_young, padj < 0.05 & log2FoldChange > 0), alpha=0.5) + geom_point(pch=20, color="skyblue", data=subset(results_old_young, padj < 0.05 & log2FoldChange < 0), alpha=0.5) + theme_classic()+ geom_hline(yintercept=0, lty=3) +
+  geom_hline(yintercept=-log10(0.05), lty=3, color="red") + geom_vline(xintercept=0, lty=3, color="red") + ylab("-Log10 FDR") + xlab("Log2 Fold Change\nOld vs Young, Saline") + xlim(c(-5, 5)) + ylim(c(0,35))
+```
+
+```{r, eval=T}
+df.write <- results_old_young
+colnames(df.write)[1] <- "ensembl_gene_id"
+df.write <- df.write[!duplicated(df.write),]
+write.table(df.write, file="rnaseq_old_vs_young.txt", quote=F, row.names=F, sep='\t')
+```
+
+```{r, eval=T}
+ranks_old_young <- subset(results_old_young, padj < 0.5)$log2FoldChange
+names(ranks_old_young) <- subset(results_old_young, padj < 0.5)$external_gene_name
+```
+
+```{r, eval=T}
+set.seed(1)
+fgsea_gobp_old_young <- fgsea(pathways=gobp.list, 
+                   stats=ranks_old_young, minSize=10, maxSize = 500)
+fgsea_gobp_old_young <- fgsea_gobp_old_young[order(fgsea_gobp_old_young$NES),]
+fgsea_gobp_old_young$pathway <- factor(fgsea_gobp_old_young$pathway, levels=unique(fgsea_gobp_old_young$pathway))
+```
+
+```{r, eval=T, fig.width=12, fig.height=5}
+ggplot(subset(fgsea_gobp_old_young, padj < 0.01), aes(y = NES, x = pathway)) +
+  geom_segment(yend=0, aes(xend=pathway), lty=3) + theme_classic() + ylab("Normalized Enrichment Score (NES)") + 
+  geom_point(aes(size=size, color=(padj)))  +
+  xlab("Gene Ontology Biological Pathways") + coord_flip() + 
+  theme(legend.position = "right", axis.text.y = element_text(vjust=0.5, size=8)) +
+  guides(size=guide_legend(title="Gene Set Size")) +
+  ylim(c(-4,4)) + geom_hline(yintercept=0, lwd=0.2)
+```
+
+```{r, eval=T}
+leading_edge_strings <- sapply(fgsea_gobp_old_young$leadingEdge, function(x) paste(x, collapse = ", "))
+write.table(data.frame(cbind(fgsea_gobp_old_young[,1:7], leadingEdge=leading_edge_strings)), file="fgsea_old_vs_young.txt", quote=F, row.names=F, sep='\t')
+```
+
+
+```{r, eval=T, echo=F}
+set.seed(1)
+results_young_morphine_saline <- lfcShrink(rnaseq_dds,coef=3)
+results_young_morphine_saline <- merge(data.frame(results_young_morphine_saline), tx2gene[!duplicated(tx2gene[,c(2,3)]),c(2,3)], by.x=0, by.y=1)
+```
+
+```{r, eval=T, fig.width=3, fig.height=3}
+ggplot(results_young_morphine_saline, aes(x=log2FoldChange, y=-log10(padj))) + geom_point(pch=20, color="lightgray", alpha=0.5, data=subset(results_young_morphine_saline, padj > 0.05)) + geom_point(pch=20, color="indianred", data=subset(results_young_morphine_saline, padj < 0.05 & log2FoldChange > 0), alpha=0.5) + geom_point(pch=20, color="skyblue", data=subset(results_young_morphine_saline, padj < 0.05 & log2FoldChange < 0), alpha=0.5) + theme_classic()+ geom_hline(yintercept=0, lty=3) +
+  geom_hline(yintercept=-log10(0.05), lty=3, color="red") + geom_vline(xintercept=0, lty=3, color="red") + ylab("-Log10 FDR") + xlab("Log2 Fold Change\nMorphine vs Saline, Young") + xlim(c(-2.5, 2.5)) + ylim(c(0,20))
+```
+
+```{r, eval=T}
+df.write <- results_young_morphine_saline
+colnames(df.write)[1] <- "ensembl_gene_id"
+df.write <- df.write[!duplicated(df.write),]
+write.table(df.write, file="rnaseq_young_morphine_vs_saline.txt", quote=F, row.names=F, sep='\t')
+```
+
+
+```{r, eval=T}
+ranks_young_morphine_saline <- subset(results_young_morphine_saline, padj < 0.5)$log2FoldChange
+names(ranks_young_morphine_saline) <- subset(results_young_morphine_saline, padj < 0.5)$external_gene_name
+```
+
+```{r, eval=T}
+set.seed(1)
+fgsea_gobp_young_morphine_saline <- fgsea(pathways=gobp.list, 
+                   stats=ranks_young_morphine_saline, minSize=10, maxSize = 500)
+fgsea_gobp_young_morphine_saline <- fgsea_gobp_young_morphine_saline[order(fgsea_gobp_young_morphine_saline$NES),]
+fgsea_gobp_young_morphine_saline$pathway <- factor(fgsea_gobp_young_morphine_saline$pathway, levels=unique(fgsea_gobp_young_morphine_saline$pathway))
+```
+
+```{r, eval=T, fig.width=8, fig.height=5}
+ggplot(subset(fgsea_gobp_young_morphine_saline, padj < 0.05), aes(y = NES, x = pathway)) +
+  geom_segment(yend=0, aes(xend=pathway), lty=3) + theme_classic() + ylab("Normalized Enrichment Score (NES)") + 
+  geom_point(aes(size=size, color=(padj)))  +
+  xlab("Gene Ontology Biological Pathways") + coord_flip() + 
+  theme(legend.position = "right", axis.text.y = element_text(vjust=0.5, size=8)) +
+  guides(size=guide_legend(title="Gene Set Size")) +
+  ylim(c(-4,4)) + geom_hline(yintercept=0, lwd=0.2)
+```
+
+
+```{r, eval=T}
+write.table(data.frame(fgsea_gobp_young_morphine_saline[,1:7]), file="fgsea_young_morphine_vs_saline.txt", quote=F, row.names=F, sep='\t')
+```
+
+
+```{r, eval=T}
+set.seed(42)
+sampleinfo$Group <- factor(as.character(sampleinfo$Group), levels=c("saline_Old", "Morphine_Old", "saline_Young", "Morphine_Young"))
+rnaseq_dds <- DESeqDataSetFromTximport(txi_gsm, colData = sampleinfo, design = ~Group)
+rnaseq_dds <- DESeq(rnaseq_dds)
+```
+
+```{r, eval=T, echo=F}
+set.seed(1)
+results_old_morphine_saline <- lfcShrink(rnaseq_dds,coef=2)
+results_old_morphine_saline <- merge(data.frame(results_old_morphine_saline), tx2gene[!duplicated(tx2gene[,c(2,3)]),c(2,3)], by.x=0, by.y=1)
+```
+
+```{r, eval=T, fig.width=3, fig.height=3}
+ggplot(results_old_morphine_saline, aes(x=log2FoldChange, y=-log10(padj))) + geom_point(pch=20, color="lightgray", alpha=0.5, data=subset(results_old_morphine_saline, padj > 0.05)) + geom_point(pch=20, color="indianred", data=subset(results_old_morphine_saline, padj < 0.05 & log2FoldChange > 0), alpha=0.5) + geom_point(pch=20, color="skyblue", data=subset(results_old_morphine_saline, padj < 0.05 & log2FoldChange < 0), alpha=0.5) + theme_classic()+ geom_hline(yintercept=0, lty=3) +
+  geom_hline(yintercept=-log10(0.05), lty=3, color="red") + geom_vline(xintercept=0, lty=3, color="red") + ylab("-Log10 FDR") + xlab("Log2 Fold Change\nMorphine vs. Saline, Old") + xlim(c(-2.5, 2.5)) + ylim(c(0,20))
+```
+
+```{r, eval=T}
+df.write <- results_old_morphine_saline
+colnames(df.write)[1] <- "ensembl_gene_id"
+df.write <- df.write[!duplicated(df.write),]
+write.table(df.write, file="rnaseq_old_morphine_vs_saline.txt", quote=F, row.names=F, sep='\t')
+```
+
+```{r, eval=T}
+ranks_old_morphine_saline <- subset(results_old_morphine_saline, padj < 0.5)$log2FoldChange
+names(ranks_old_morphine_saline) <- subset(results_old_morphine_saline, padj < 0.5)$external_gene_name
+```
+
+```{r, eval=T}
+set.seed(1)
+fgsea_gobp_old_morphine_saline <- fgsea(pathways=gobp.list, 
+                   stats=ranks_old_morphine_saline, minSize=10, maxSize = 500)
+fgsea_gobp_old_morphine_saline <- fgsea_gobp_old_morphine_saline[order(fgsea_gobp_old_morphine_saline$NES),]
+fgsea_gobp_old_morphine_saline$pathway <- factor(fgsea_gobp_old_morphine_saline$pathway, levels=unique(fgsea_gobp_old_morphine_saline$pathway))
+```
+
+```{r, eval=T, fig.width=8, fig.height=5}
+ggplot(subset(fgsea_gobp_old_morphine_saline, padj < 0.05), aes(y = NES, x = pathway)) +
+  geom_segment(yend=0, aes(xend=pathway), lty=3) + theme_classic() + ylab("Normalized Enrichment Score (NES)") + 
+  geom_point(aes(size=size, color=(padj)))  +
+  xlab("Gene Ontology Biological Pathways") + coord_flip() + 
+  theme(legend.position = "right", axis.text.y = element_text(vjust=0.5, size=8)) +
+  guides(size=guide_legend(title="Gene Set Size")) +
+  ylim(c(-4,4)) + geom_hline(yintercept=0, lwd=0.2)
+```
+
+
+```{r, eval=T}
+leading_edge_strings <- sapply(fgsea_gobp_old_morphine_saline$leadingEdge, function(x) paste(x, collapse = ", "))
+
+write.table(data.frame(cbind(fgsea_gobp_old_morphine_saline[,1:7], leadingEdge=leading_edge_strings)), file="fgsea_gobp_old_morphine_saline.txt", quote=F, row.names=F, sep='\t')
+```
+
+```{r, eval=T}
+sessionInfo()
+```
+
+
+
