@@ -1,4 +1,5 @@
 Age-dependent transcriptomic effects of morphine in the frontal cortex of female mice
+
 This repository provides instructions, code, and supplementary data files to reproduce results and figures from our opioid and aging paper
 
 J Savage, A Rai, JD Lee, J Banahan, K Dujic, M Nunez, B Caldarone, S Ghoshal, FJ Slack, M Mavrikaki. Age-dependent transcriptomic effects of morphine in the frontal cortex of female mice. Neuropharmacology (In revision 2025).
